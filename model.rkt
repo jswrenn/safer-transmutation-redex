@@ -146,14 +146,12 @@
   ; unwrap lone l from ×
   [(~ (× l)
       l)
-   unwrap-×
-   ]
+   unwrap-×]
 
   ; unwrap lone l from +
   [(~ (+ l)
       l)
-   unwrap-+
-   ]
+   unwrap-+]
   )
 
 ; is a layout transmutable to another layout?
@@ -203,21 +201,14 @@
 
 
   ; ⋅ → ⋅
-  [
-   ------------------------------ init→init
+  [-------- init→init
    (→ i i)]
 
-  [---------------- init→uninit
+  [-------- init→uninit
    (→ i u)]
 
-  [------------------ uninit→uninit
+  [-------- uninit→uninit
    (→ u u)]
-
-
-  
-  
-
-  
   )
 
 
