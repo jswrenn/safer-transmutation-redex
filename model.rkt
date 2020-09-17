@@ -2,46 +2,52 @@
 
 (require redex)
 
+
+
 (define-language
   layouts
 
-  [l ::=
-     ; enums
-     l+
-     ; structs
-     l×
-     ; atoms
-     l⋅]
+  ; a layout
+  [l :: l+ l× l⋅]
+  
+  [l+ ::= (+ l ...)] ; enum layout
+  [l× ::= (× l ...)] ; struct layout
+  [l⋅ ::= i u] ; atom layout
 
-  [l+ ::= (+ l ...)]
-  [l× ::= (× l ...)]
-  [l⋅ ::=
-          ; initialized byte of value
-          init
-          ; uninitialized byte
-          uninit]
-          
+  ; initialized byte(s) in value range
+  [i ::=
+     (side-condition
+      (init (name len natural)
+            (name min natural)
+            (name max natural))
+      (< -1
+         (term min)
+         (term max)
+         (expt 255 (term len))))]
 
-  [init ::=
-      (side-condition
-       (name value number)
-       (<= 0 (term value) 255))]
-
+  ; a type
+  ; need to update this for the new `i` :/
   [t ::=
    (struct t ...)
    (union t ...)
    (array t natural)
    init
-   foo ; <- just here temporarily for testing types with alignment > 1]
+   foo]
   )
 
 ; enum syntactic sugar
 ; enum desugars to union of structs
+#;
 (define-metafunction layouts
   enum : (init_!_ (t ...)) ... -> t
   [(enum (init (t ...)) ...)
    (union (struct init t ...) ...)])
 
+(define-metafunction layouts
+  u8= : (side-condition (name value natural)
+                        (<= 0 (term value) 255)) -> l⋅
+  [(u8= natural)
+   (init 1 natural ,(+ (term natural) 1))])
 
 ; align-of
 (define-metafunction layouts
@@ -116,14 +122,39 @@
   #:contract (~ l l)
 
   ; TODO more forms!
-  
-  ; distribute
-  [(~ (× (+ l_a ...) l_m)
-      (+ (× l_a l_m) ...))]
 
-  ; distribute
+  ; right-associate +
+  [(~ (+ l_0 l_1 l_2 l_n ...)
+      (+ l_0 (+ l_1 l_2 l_n ...)))
+   right-associate-+]
+
+  ; right-associate ×
+  [(~ (× l_0 l_1 l_2 l_n ...)
+      (× l_0 (× l_1 l_2 l_n ...)))
+   right-associate-×]
+
+  ; left-distribute
   [(~ (× l_m (+ l_a ...))
-      (+ (× l_a l_m) ...))])
+      (+ (× l_a l_m) ...))
+   left-distribute]
+  
+  ; right-distribute
+  [(~ (× (+ l_a ...) l_m)
+      (+ (× l_a l_m) ...))
+   right-distribute]
+
+  ; unwrap lone l from ×
+  [(~ (× l)
+      l)
+   unwrap-×
+   ]
+
+  ; unwrap lone l from +
+  [(~ (+ l)
+      l)
+   unwrap-+
+   ]
+  )
 
 ; is a layout transmutable to another layout?
 (define-judgment-form layouts
@@ -132,7 +163,7 @@
 
   ; algebraic transformations of src and dst
   
-  [ (~ l_src l_src′) (→ l_src′  l_dst)
+  [ (~ l_src l_src′) (→ l_src′ l_dst)
    ----------------------------------- src′
             (→ l_src l_dst)          ]
   
@@ -157,7 +188,7 @@
 
   ; nom
   [(→ l_src l_dst) (→ (× l_src_n ...) (× l_dst_n ...))
-   ---------------------------------------------------- ×→×:nom
+   ---------------------------------------------------- +→+:nom
      (→ (× l_src l_src_n ...) (× l_dst l_dst_n ...))  ]
 
   ; bytes may be truncated from the `dst`; e.g.:
@@ -168,18 +199,19 @@
   ; uninit bytes may be conjure from the `src`; e.g.: 
   ; union Transmute { src: (), dst: u8 }
   [------------------------ ×→×:grow
-   (→ (×) (× uninit ...)) ]
+   (→ (×) (× u ...)) ]
 
 
   ; ⋅ → ⋅
-  [-------------- init→init
-   (→ init init)]
+  [
+   ------------------------------ init→init
+   (→ i i)]
 
   [---------------- init→uninit
-   (→ init uninit)]
+   (→ i u)]
 
   [------------------ uninit→uninit
-   (→ uninit uninit)]
+   (→ u u)]
 
 
   
@@ -190,41 +222,54 @@
 
 
 (test-judgment-holds
- (→ 1 1))
+ (→ (u8= 1) (u8= 1)))
+
 
 ; shrink
 (test-judgment-holds
- (→ (× 1) (×)))
+ (→ (× (u8= 1)) (×)))
+
 ; grow
 (test-judgment-holds
- (→ (×) (× uninit)))
+ (→ (×) (× u)))
+
+#;
+(traces	
+ ~
+ (term (× (u8= 1) (u8= 2)))
+ #:edge-labels? #t
+ )
+
+
 ; nom
 (test-judgment-holds
- (→ (× 1 2) (× 1 2)))
+ (→ (× (u8= 1) (u8= 2)) (× (u8= 1) (u8= 2))))
+
+
 
 (test-judgment-holds
- (→ (+ (× 1)) (+ (× 1) (× 2) (× 3))))
+ (→ (+ (× (u8= 1))) (+ (× (u8= 1)) (× (u8= 2)) (× (u8= 3)))))
 
 (test-judgment-holds
- (→ (+ (× 2)) (+ (× 1) (× 2) (× 3))))
+ (→ (+ (× (u8= 2))) (+ (× (u8= 1)) (× (u8= 2)) (× (u8= 3)))))
 
 (test-judgment-holds
- (→ (+ (× 3)) (+ (× 1) (× 2) (× 3))))
+ (→ (+ (× (u8= 3))) (+ (× (u8= 1)) (× (u8= 2)) (× (u8= 3)))))
 
 ; dist
 (test-judgment-holds
  (→
-  (+ (× 1 3) (× 2 3))
-  (× (+ 1 2) 3)
+  (+ (× (u8= 1) (u8= 3)) (× (u8= 2) (u8= 3)))
+  (× (+ (u8= 1) (u8= 2)) (u8= 3))
  ))
 
-; dist (currently failing)
+; more dist
 (test-judgment-holds
  (→
-  (× (+ 1 2) 3 4)
-  (+ (× 1 3 4) (× 2 3 4))
+  (× (+ (u8= 1) (u8= 2)) (u8= 3) (u8= 4))
+  (+ (× (u8= 1) (u8= 3) (u8= 4)) (× (u8= 2) (u8= 3) (u8= 4)))
  ))
 
-
+#||#
 
 (test-results)
