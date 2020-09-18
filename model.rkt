@@ -22,7 +22,10 @@
 
       ; void
       ∅
-      
+
+      lb]
+
+  [lb ::=
       ; uninit bytes
       (u (name len natural))
       
@@ -48,6 +51,36 @@
   ⊖ : natural natural -> natural
   [(⊖ natural_0 natural_1)
    ,(min 0 (- (term natural_0) (term natural_1)))])
+
+; integer divide
+(define-metafunction layouts
+  ⊘ : natural natural -> natural
+  [(⊘ natural_0 natural_1)
+   ,(quotient (term natural_0) (term natural_1))])
+
+; max
+(define-metafunction layouts
+  ⊓ : natural natural -> natural
+  [(⊓ natural_0 natural_1)
+   ,(max (term natural_0) (term natural_1))])
+
+; exponentiation
+(define-metafunction layouts
+  ^ : natural natural -> natural
+  [(^ natural_0 natural_1)
+   ,(expt (term natural_0) (term natural_1))])
+
+; snip bytes
+(define-metafunction layouts
+  ✂ : lb natural -> lb
+  [(✂ (u natural_len) natural_snip)
+   (u (⊖ natural_len natural_snip))]
+
+  ; this is the routine for little-endian targets
+  [(✂ (i natural_len natural_min natural_max) natural_snip)
+   (i (⊖ natural_len natural_snip)
+      (⊘ (⊓ natural_min (^ 2 (⊖ natural_len natural_snip))))
+      (⊘ natural_max (^ 2 (⊖ natural_len natural_snip))))])
 
 ; append
 (define-metafunction layouts
@@ -116,7 +149,6 @@
   [ (~ l_dst l_dst′) (→ l_src  l_dst′)
    ----------------------------------- dst′
             (→ l_src l_dst)          ]
-
   
   ;; +→∗
   ; 1. +→×
@@ -188,58 +220,43 @@
       ε l)]
 
   ; u→u
-  [(where natural_src_len′
-          (⊖ natural_src_len natural_dst_len))
-   (where natural_dst_len′
-          (⊖ natural_dst_len natural_src_len))
+  [(where natural_src′
+          (✂ (u natural_src_len)))
+   
+   (where natural_dst′
+          (✂ (u natural_dst_len)))      
    ---------------------------------------------
    (⇝ (u natural_src_len) (u natural_dst_len)
       ; into:
-      (u natural_src_len′) (u natural_dst_len′))]
+      natural_src′ natural_dst′)]
 
   ; i→u
-  [(where natural_src_len′
-          (⊖ natural_src_len natural_dst_len))
-   ; we're truncating the src, so the min and max
-   ; bounds must be adjusted accordingly
-   ; this will differ depending on endian
-   (where natural_src_min′
-          #| TODO |# hole)
-   (where natural_src_max′
-          #| TODO |# hole)
+  [(where natural_src′
+          (✂ (i natural_src_len
+                natural_src_min
+                natural_src_max)))
    
-   (where natural_dst_len′
-          (⊖ natural_dst_len natural_src_len))
+   (where natural_dst′
+          (✂ (u natural_dst_len)))
    ---------------------------------------------
    (⇝ (i natural_src_len
          natural_src_min
          natural_src_max)
       (u natural_dst_len)
       ; into
-      (i natural_src_len′
-         natural_src_min′
-         natural_src_max′)
-      (u natural_dst_len′))]
+      natural_src′
+      natural_dst′)]
 
   ; i→i
-  [(where natural_src_len′
-          (⊖ natural_src_len natural_dst_len))
-   ; we're truncating the src, so the min and max
-   ; bounds must be adjusted accordingly
-   ; this will differ depending on endian
-   (where natural_src_min′
-          #| TODO |# hole)
-   (where natural_src_max′
-          #| TODO |# hole)
-   
-   (where natural_dst_len′
-          (⊖ natural_dst_len natural_src_len))
-   ; we're truncating the dst, so the min and max
-   ; bounds must be adjusted accordingly
-   (where natural_dst_min′
-          #| TODO |# hole)
-   (where natural_dst_max′
-          #| TODO |# hole)
+  [(where natural_src′
+          (✂ (i natural_src_len
+                natural_src_min
+                natural_src_max)))
+
+   (where natural_dst′
+          (✂ (i natural_dst_len
+                natural_dst_min
+                natural_dst_max)))
    ---------------------------------------------
    (⇝ (i natural_src_len
          natural_src_min
@@ -248,13 +265,8 @@
          natural_dst_min
          natural_dst_max)
       ; into
-      (i natural_src_len′
-         natural_src_min′
-         natural_src_max′)
-      (i natural_dst_len′
-         natural_dst_min′
-         natural_dst_max′))]
-  
+      natural_src′
+      natural_dst′)]
   )
 
 ; shorthand for test cases
