@@ -60,9 +60,15 @@
 
 ; max
 (define-metafunction layouts
+  ⊔ : natural natural -> natural
+  [(⊔ natural_0 natural_1)
+   ,(max (term natural_0) (term natural_1))])
+
+; min
+(define-metafunction layouts
   ⊓ : natural natural -> natural
   [(⊓ natural_0 natural_1)
-   ,(max (term natural_0) (term natural_1))])
+   ,(min (term natural_0) (term natural_1))])
 
 ; exponentiation
 (define-metafunction layouts
@@ -70,17 +76,53 @@
   [(^ natural_0 natural_1)
    ,(expt (term natural_0) (term natural_1))])
 
-; snip bytes
+; len of an `i` or `u` byte sequence
 (define-metafunction layouts
-  ✂ : lb natural -> lb
+  📏 : lb -> natural_len
+  [(📏 (u natural_len))
+   natural_len]
+
+  [(📏 (i natural_len natural_min natural_max))
+   natural_len])
+
+; neq
+(define-metafunction layouts
+  ≠ : natural natural -> boolean
+  [(≠ natural natural) #f]
+  [(≠ natural_0 natural_1) #t])
+; eq
+(define-metafunction layouts
+  = : natural natural -> boolean
+  [(= natural natural) #t]
+  [(= natural_0 natural_1) #f])
+; lte
+(define-metafunction layouts
+  ≤ : natural natural -> boolean
+  [(≤ natural_0 natural_1)
+   ,(<= (term natural_0) (term natural_1))])
+; gte
+(define-metafunction layouts
+  ≥ : natural natural -> boolean
+  [(≥ natural_0 natural_1)
+   ,(>= (term natural_0) (term natural_1))])
+
+; snip bytes
+; todo: test this! I just eyeballed it.
+(define-metafunction layouts
+  ✂ : lb natural -> (lb lb)
   [(✂ (u natural_len) natural_snip)
-   (u (⊖ natural_len natural_snip))]
+   ((u (⊓ natural_len natural_snip))
+    (u (⊖ natural_len natural_snip)))]
 
   ; this is the routine for little-endian targets
   [(✂ (i natural_len natural_min natural_max) natural_snip)
-   (i (⊖ natural_len natural_snip)
-      (⊘ (⊓ natural_min (^ 2 (⊖ natural_len natural_snip))))
-      (⊘ natural_max (^ 2 (⊖ natural_len natural_snip))))])
+   ((i natural_snip
+       (⊓ natural_len natural_snip)
+       (⊓ natural_min (^ 2 (⊓ natural_len natural_snip)))
+       (⊓ natural_max (^ 2 (⊓ natural_len natural_snip))))
+    (i (⊖ natural_len natural_snip)
+       (⊘ (⊔ natural_min (^ 2 (⊖ natural_len natural_snip))))
+       (⊘ natural_max (^ 2 (⊖ natural_len natural_snip)))))])
 
 ; append
 (define-metafunction layouts
@@ -219,55 +261,54 @@
   [(⇝ ∅ l
       ε l)]
 
-  ; u→u
-  [(where natural_src′
-          (✂ (u natural_src_len)))
+  ; b→b; with length-equalizing snip
+  [(side-condition
+    (≠ (📏 lb_src)
+       (📏 lb_dst)))
    
-   (where natural_dst′
-          (✂ (u natural_dst_len)))      
-   ---------------------------------------------
-   (⇝ (u natural_src_len) (u natural_dst_len)
-      ; into:
-      natural_src′ natural_dst′)]
+   (where (lb_src′ lb_src″)
+          (✂ lb_src))
 
-  ; i→u
-  [(where natural_src′
-          (✂ (i natural_src_len
-                natural_src_min
-                natural_src_max)))
+   (where (lb_dst′ lb_dst″)
+          (✂ lb_dst))
+
+   (→ lb_src′ lb_dst′)
+   ----------------------------------
+   (⇝ lb_src lb_dst lb_src″ lb_dst″)]
+
+  ; b→b; without length-equalizing snip
+  [(side-condition
+    (= (📏 lb_src)
+       (📏 lb_dst)))
    
-   (where natural_dst′
-          (✂ (u natural_dst_len)))
-   ---------------------------------------------
-   (⇝ (i natural_src_len
-         natural_src_min
-         natural_src_max)
-      (u natural_dst_len)
-      ; into
-      natural_src′
-      natural_dst′)]
-
-  ; i→i
-  [(where natural_src′
-          (✂ (i natural_src_len
-                natural_src_min
-                natural_src_max)))
-
-   (where natural_dst′
-          (✂ (i natural_dst_len
-                natural_dst_min
-                natural_dst_max)))
-   ---------------------------------------------
-   (⇝ (i natural_src_len
-         natural_src_min
-         natural_src_max)
-      (i natural_dst_len
-         natural_dst_min
-         natural_dst_max)
-      ; into
-      natural_src′
-      natural_dst′)]
+   (→ lb_src lb_dst)
+   ----------------------
+   (⇝ lb_src lb_dst ε ε)]
   )
+
+(define-judgment-form layouts
+  #:mode (⊆ I I)
+  #:contract (⊆ lb lb)
+
+  [(⊆ (u natural_len)
+      (u natural_len))]
+
+  [(⊆ (i natural_len
+         natural_min
+         natural_max)
+      (u natural_len))]
+
+  [(side-condition
+    (≥ natural_src_min natural_dst_min))
+   (side-condition
+    (≤ natural_src_max natural_dst_max))
+   -------------------------------------
+   (⊆ (i natural_len
+         natural_src_min
+         natural_src_max)
+      (i natural_len
+         natural_dst_min
+         natural_dst_max))])
 
 ; shorthand for test cases
 (define-metafunction layouts
