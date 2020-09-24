@@ -127,19 +127,31 @@ pub fn transmutable(src: Layout, dst: Layout, params: Params) -> bool {
         (Prod(box Atom(src_h@Bytes(src_len, ref src_kind)), src_t)
         ,Prod(box Atom(dst_h@Bytes(dst_len, ref dst_kind)), dst_t)) =>
             match src_len.cmp(&dst_len) {
+                // If the lengths of the Bytes are equal, their transmutability
+                // depends on respective validity.
                 Equal => {
                     use BytesKind::*;
                     (match (src_kind, dst_kind) {
+                        // Initialized Bytes cannot be constructed
+                        // from Uninitialized Bytes
                         (Uninitialized, Initialized{..}) => false,
                         
+                        // UninitializedBbytes can be constructed from
+                        // either Initialized Bytes or Uninitialized bytes
                         (Uninitialized, Uninitialized) |
                         (Initialized{..}, Uninitialized) => true,
 
+                        // Initialized Bytes are transmutable only into
+                        // Initialized Bytes whose validity subsumes src.
                         (Initialized { min: src_min, max: src_max},
                          Initialized { min: dst_min, max: dst_max}) => 
                             src_min >= dst_min && src_max <= dst_max,
                     }) && (transmutable(*src_t, *dst_t, params))
                 },
+                // If the lengths of the Bytes are inequal, we split the longer
+                // Bytes into a layout where the first component is the size of
+                // the shorter Bytes.
+                // The `src` is smaller:
                 Less => {
                     let diff = dst_len.get() - src_len.get();
                     let dst_h = dst_h.split_bytes_at(diff.try_into().unwrap(), params.endian);
@@ -148,6 +160,7 @@ pub fn transmutable(src: Layout, dst: Layout, params: Params) -> bool {
                         Prod(box dst_h, dst_t),
                         params)
                 },
+                // The `dst` is smaller:
                 Greater => {
                     let diff = src_len.get() - dst_len.get();
                     let src_h = src_h.split_bytes_at(diff.try_into().unwrap(), params.endian);
