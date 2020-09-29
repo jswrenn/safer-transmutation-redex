@@ -71,8 +71,36 @@ impl LayoutAtom {
             },
 
             (Initialized { min, max }, Endian::Little) => {
-                todo!("split the bytes!")
-            },
+                let max_l = (1 << (n.get() * 8)) - 1;
+                let shift = n.get() * 8;
+
+                if max <= max_l {
+                    Prod(
+                        box Atom(Bytes(n, Initialized {min, max})),
+                        box Atom(Bytes(n, Initialized {min: 0, max: 0})))
+                } else if min <= max_l {
+                    Sum(
+                        box Prod(
+                            box Atom(Bytes(n, Initialized {min, max: max_l})),
+                            box Atom(Bytes(n, Initialized {min: 0, max: (max - max_l) >> shift}))),
+                        box Sum(
+                            box Prod(
+                                box Atom(Bytes(n, Initialized {min: 0, max: max_l})),
+                                box Atom(Bytes(n, Initialized {min: 1, max: (max - max_l) >> shift}))),
+                            box Prod(
+                                box Atom(Bytes(n, Initialized {min: 0, max: max - ((max >> shift) << shift) })),
+                                box Atom(Bytes(n, Initialized {min: 0, max: max >> shift})))))
+                } else {
+                    let min_r = (min + (1 << shift - 1)) >> shift;
+                    Sum(
+                        box Prod(
+                            box Atom(Bytes(n, Initialized {min: 0, max: max_l})),
+                            box Atom(Bytes(n, Initialized {min: min_r, max: (max - max_l) >> shift}))),
+                        box Prod(
+                            box Atom(Bytes(n, Initialized {min: 0, max: max - ((max >> shift) << shift)})),
+                            box Atom(Bytes(n, Initialized {min: min_r, max: max >> shift}))))
+                }
+            }
         }
     }
 }
