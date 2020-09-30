@@ -101,14 +101,14 @@ pub fn transmutable(src: Layout, dst: Layout, params: Params) -> bool {
         //
         // Unfortunately, this rule alone is overly-restrictive in cases where
         // the `dst` variants could be combined. Consider transmuting the `src`:
-        //    `Bytes(1, Initialized { min: 0, max: 255 })`
+        // ```
+        //    Atom(Byte(Init(0..=127))),
+        // ```
         // ...into the `dst`:
         // ```
-        //    Sum(
-        //      Bytes(1, Initialized { min:   0, max: 127 }),
-        //      Bytes(1, Initialized { min: 128, max: 255 }))
+        //    Sum(box Atom(Byte(Init(0..=126))),
+        //        box Atom(Byte(Init(127..=255))))
         // ```
-        //
         // The `src` is not transmutable into either variant of the `dst` when
         // considered independently. TODO: How to account for this?
         (src, Sum(box l, box r)) =>
