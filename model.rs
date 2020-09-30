@@ -24,6 +24,21 @@ pub enum Layout {
     Prod(Box<Layout>, Box<Layout>),
 }
 
+impl Layout {
+    
+    pub const fn is_uninhabited(&self) -> bool {
+        use Layout::*;
+        use LayoutAtom::*;
+
+        match self {
+            Atom(Void) => true,
+            Sum(box a, box b) => a.is_uninhabited() && b.is_uninhabited(),
+            Prod(box a, box b) => a.is_uninhabited() || b.is_uninhabited(),
+            Atom(Byte(..)) | Atom(Epsilon) => false,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum LayoutAtom {
     /// An uninhabited type.
@@ -34,6 +49,7 @@ pub enum LayoutAtom {
     Byte(Option<RangeInclusive<u8>>),
 }
 
+
 #[derive(Clone, Copy)]
 pub struct Params {
     pub endian: Endian,
@@ -42,8 +58,25 @@ pub struct Params {
 pub fn transmutable(src: Layout, dst: Layout, params: Params) -> bool {
     use Layout::*;
     use LayoutAtom::*;
+    
+    if src.is_uninhabited() {
+        return true;
+    }
+    
+    if dst.is_uninhabited() {
+        return false;
+    }
 
     match (src, dst) {
+        // The `Void` layout is transmutable into anything.
+        (Prod(box Atom(Void), box _src_t), _dst@Prod(..)) =>
+            unreachable!("if src.is_uninhabited() { return true; }"),
+
+        // The `Void` layout is *not* transmutable *from* anything.
+        (Prod(..), Prod(box Atom(Void), ..)) =>
+            unreachable!("if src.is_uninhabited() { return false; }"),
+
+
         // If the `src` is a choice between two layouts, both must be
         // transmutable into `dst`.
         (Sum(box l, box r), dst) =>
@@ -68,18 +101,6 @@ pub fn transmutable(src: Layout, dst: Layout, params: Params) -> bool {
         (src, Sum(box l, box r)) =>
             transmutable(src.clone(), l, params)
               || transmutable(src, r, params),
-
-        // The `Void` layout is transmutable into anything.
-        //
-        // Unfortunately, this rule alone is overly-restrictive in cases where
-        // `Void` is not at the 'front' of the layout. TODO: an `is_uninhabited`
-        // predicate.
-        (Prod(box Atom(Void), box _src_t), _dst@Prod(..)) =>
-            true,
-
-        // The `Void` layout is *not* transmutable *from* anything.
-        (Prod(..), Prod(box Atom(Void), ..)) =>
-            false,
 
         (Prod(box Atom(Byte(ref src_kind)), src_t)
         ,Prod(box Atom(Byte(ref dst_kind)), dst_t)) =>
