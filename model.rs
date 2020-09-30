@@ -6,13 +6,6 @@ use core::option::Option::{
     Some as Init,
 };
 
-/// The compilation target is either big or little endian.
-#[derive(Clone, Copy)]
-pub enum Endian {
-    Big,
-    Little,
-}
-
 /// Represents a type's layout.
 #[derive(Clone)]
 pub enum Layout {
@@ -51,9 +44,7 @@ pub enum LayoutAtom {
 
 
 #[derive(Clone, Copy)]
-pub struct Params {
-    pub endian: Endian,
-}
+pub struct Params {}
 
 pub fn transmutable(src: Layout, dst: Layout, params: Params) -> bool {
     use Layout::*;
@@ -74,7 +65,7 @@ pub fn transmutable(src: Layout, dst: Layout, params: Params) -> bool {
 
         // The `Void` layout is *not* transmutable *from* anything.
         (Prod(..), Prod(box Atom(Void), ..)) =>
-            unreachable!("if src.is_uninhabited() { return false; }"),
+            unreachable!("if dst.is_uninhabited() { return false; }"),
 
 
         // If the `src` is a choice between two layouts, both must be
@@ -122,13 +113,21 @@ pub fn transmutable(src: Layout, dst: Layout, params: Params) -> bool {
         // these tactics are applied only if none of the previous tactics are
         // applicable, to avoid cyclic transformations
         
-        // distribute src
-        (Prod(a, box Sum(b, c)), dst) | (Prod(box Sum(b, c), a), dst) =>
+        // left distribute src
+        (Prod(a, box Sum(b, c)), dst) =>
             transmutable(Sum(box Prod(a.clone(), b), box Prod(a, c)), dst, params),
-
-        // distribute dst
-        (src, Prod(a, box Sum(b, c))) | (src, Prod(box Sum(b, c), a)) =>
+        
+        // right distribute src
+        (Prod(box Sum(a, b), c), dst) =>
+            transmutable(Sum(box Prod(a, c.clone()), box Prod(b, c)), dst, params),
+        
+        // left distribute dst
+        (src, Prod(a, box Sum(b, c))) =>
             transmutable(src, Sum(box Prod(a.clone(), b), box Prod(a, c)), params),
+        
+        // right distribute dst
+        (src, Prod(box Sum(a, b), c)) =>
+            transmutable(src, Sum(box Prod(a, c.clone()), box Prod(b, c)), params),
 
         // wrap atom in prod with epsilon
         (src@Atom(..), dst) =>
