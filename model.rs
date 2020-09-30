@@ -188,3 +188,18 @@ fn bytes_transmutable(src: &Validity, dst: &Validity, params: Params) -> bool {
         (Init(src), Init(dst)) => (src.start() >= dst.start() && src.end() <= dst.end()),
     }
 }
+
+/// This test case captures the problem with * -> Sum
+#[test]
+fn test() {
+    use Layout::*;
+    use LayoutAtom::*;
+    assert!(transmutable(
+        Atom(Byte(Init(0..=127))),
+        Sum(
+            box Atom(Byte(Init(0..=126))),
+            box Atom(Byte(Init(127..=255))),
+        ),
+        Params {}
+    ));
+}
